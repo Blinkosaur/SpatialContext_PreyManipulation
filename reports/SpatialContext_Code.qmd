@@ -1,6 +1,12 @@
+Project Title:
+The influence of spatial context on prey manipulation behaviors in the 
+California moray eel (Gymnothorax mordax)
+
+Authors: 
+
 
 Research Aims:
-Our aim was to assess the impact of spatial context on prey manipulation in the California moray eel (Gymnothorax mordax), a crevice forager with a diverse prey handling repertoire. We first compared the duration engaged in specific manipulation behaviors between spatially “enclosed” and “open” foraging environments, followed by a comparison of tightly enclosed spaces that were scaled to individual moray diameter. We observed that the durations spent engaged in specific behaviors varied based on spatial context, however despite these changes the total time feeding on, manipulating, and swallowing prey did not vary across treatments. These results highlight the behavioral adaptability of morays, suggesting that they can adjust prey manipulation strategies for specific spatial contexts without compromising overall feeding duration. We additionally documented two previously undescribed behaviors (tail and body anchoring) which seem to be used in the smallest treatments for leverage when knotting behavior was not possible due to spatial constraints. This research provides valuable insight into the foraging ecology of this locally abundant apex predator and aids in furthering our understanding of predator-prey interactions within the kelp forest ecosystem.
+Our aim was to assess the impact of spatial context on prey manipulation in the California moray eel (Gymnothorax mordax), a crevice forager with a diverse prey handling repertoire. We first compared the duration engaged in specific manipulation behaviors between spatially “enclosed” and “open” foraging environments (Experiment 1), followed by a comparison of tightly enclosed spaces that were scaled to individual moray diameter (Experiment 2). 
 
 
 ```{r - Libraries}
@@ -21,8 +27,6 @@ library(cowplot)
 library(patchwork)
 library(magick)
 ```
-
-
 
 
 # EXPERIMENT 1: Open vs Enclosed Crevices 
@@ -444,8 +448,6 @@ ShakePic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyMa
 RotatePic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Rotating.png")
 RamPic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Ramming.png")
 
-![Elephant](elephant.png)
-
 # Creating a data frame with pairwise significance: 
 p1_handdur_signif <- tribble(
   ~Treatment, ~Behavior,     ~Signif,
@@ -534,7 +536,6 @@ P1_FinalFigure
 
 
 ggsave(filename = "P1_Final.png", plot = P1_FinalFigure, width = 11, height = 10, dpi = 300)
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
 
