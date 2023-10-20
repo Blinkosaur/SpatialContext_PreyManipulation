@@ -1,0 +1,1418 @@
+
+Research Aims:
+Our aim was to assess the impact of spatial context on prey manipulation in the California moray eel (Gymnothorax mordax), a crevice forager with a diverse prey handling repertoire. We first compared the duration engaged in specific manipulation behaviors between spatially “enclosed” and “open” foraging environments, followed by a comparison of tightly enclosed spaces that were scaled to individual moray diameter. We observed that the durations spent engaged in specific behaviors varied based on spatial context, however despite these changes the total time feeding on, manipulating, and swallowing prey did not vary across treatments. These results highlight the behavioral adaptability of morays, suggesting that they can adjust prey manipulation strategies for specific spatial contexts without compromising overall feeding duration. We additionally documented two previously undescribed behaviors (tail and body anchoring) which seem to be used in the smallest treatments for leverage when knotting behavior was not possible due to spatial constraints. This research provides valuable insight into the foraging ecology of this locally abundant apex predator and aids in furthering our understanding of predator-prey interactions within the kelp forest ecosystem.
+
+
+```{r - Libraries}
+library(tidyverse)
+library(ggplot2)
+library(gamlss)
+library(ggpubr)
+library(rstatix)
+library(png)
+library(lme4)
+library(ggsignif)
+library(glmmTMB)
+library("emmeans")
+library(dplyr)
+library(MASS)
+library(png)
+library(cowplot)
+library(patchwork)
+library(magick)
+```
+
+
+
+
+# EXPERIMENT 1: Open vs Enclosed Crevices 
+
+In experiment 1, our objective was to determine whether morays exhibit similar prey manipulation behaviors between open and enclosed foraging environments. We created three experimental feeding treatments; two enclosed (5cm and 10cm in diameter) and one open treatment. 
+
+```{r - Phase 1 Data set}
+# Naming & reading all the datasets 
+P1 <- read_csv(here::here("data/Phase1-SpatialContext.csv")) 
+
+head(P1)
+
+```
+P1 data contains:
+Treatment = 'Open' (open spatial treatment), '10cm' (10cm diameter enclosed treatment), '5cm' (5cm diameter enclosed treatment)
+Eel = name of the individual
+Trial_Duration = Duration of time in seconds from first bite to completion of swallowing
+Handling_Dur = Time in seconds spent engaged in at least one of the prey manipulation behaviors 
+Bites = total individual bites 
+Ptransport_Dur = The duration of time in seconds engaged in swallowing (pharyngeal transport)
+
+All behaviors (shaking, ramming, rotating, and knotting) have three columns: 
+Example - Shaking_Dur = the total duration spent shaking
+          Shaking_Prop = Proportion of time spent shaking out of the total Trial_Duration
+          Shaking_Prop_Handling = Proportion of time spent shaking out of the total Handling_Dur
+          
+Knotting_Binomial = was knotting observed, yes/no
+      
+
+# ⌛⌛⌛️ TRIAL COMPONENT DURATIONS
+
+This section of code focuses on the total feeding time (Trial_Duration), the time spent handling prey (Handling_Dur), and the time spent swallowing prey (Ptransport_Dur) between treatments (open vs 5cm vs 10cm treatments)
+
+# Data Prep - Duration of Trial Components  [Feeding Duration, Manipulation Duration, Swallowing Duration]
+
+```{r - Trial Duration Componants -- Mean & SE Calculations }
+
+#Selecting the columns we want:
+DurSelP1 <- P1 %>%
+  select(Treatment, Eel, Trial_Duration, Ptransport_Dur, Handling_Dur) %>%
+  drop_na()
+
+head(DurSelP1) 
+
+#Making treatment a factor:
+DurSelP1$Treatment = factor(DurSelP1$Treatment)
+
+## Prepping a dataframe for Graphics - Pivot for long format 
+P1_Dur_Long <- DurSelP1 %>%
+  pivot_longer(cols = c(Trial_Duration, Ptransport_Dur, Handling_Dur), 
+               names_to = "Duration", 
+               values_to = "Time")
+
+#Making Duration a factor:
+P1_Dur_Long$Duration = factor(P1_Dur_Long$Duration)
+
+head(P1_Dur_Long)
+
+
+#Calculating Mean & SE For Graphics - This code is used to create future bar graphs comparing the mean time spent engaged in feeding, prey handling, and swallowing between treatments
+P1_Dur_SE = P1_Dur_Long %>%
+  group_by(Duration, Treatment) %>%
+  summarize(mean = mean(Time, na.rm = TRUE),
+            sd = sd(Time, na.rm = TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+head(P1_Dur_Long)
+
+# --- Getting MEANS & SE for each Individual Duration Category --------------------------
+
+# --------------------------- #
+# TOTAL FEEDING DURATION
+# --------------------------- #
+
+P1_Feed_SE = DurSelP1 %>%  
+  group_by(Treatment) %>% #
+  summarize(mean = mean(Trial_Duration, na.rm=TRUE),
+            sd = sd(Trial_Duration, na.rm=TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+P1_Feed_SE
+
+# --------------------------- #
+# HANDLING DURATION
+# --------------------------- #
+
+P1_Hand_SE = DurSelP1 %>%  
+  group_by(Treatment) %>% #
+  summarize(mean = mean(Handling_Dur, na.rm=TRUE),
+            sd = sd(Handling_Dur, na.rm=TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+P1_Hand_SE
+
+
+# --------------------------- #
+# Swallowing Time
+# --------------------------- #
+
+P1_Swallow_SE = DurSelP1 %>%
+  group_by(Treatment) %>%
+  summarize(mean = mean( Ptransport_Dur, na.rm = TRUE),
+            sd = sd(Ptransport_Dur, na.rm = TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+P1_Swallow_SE 
+
+```
+
+
+# Stats - Duration of Trial Components [Feeding Duration, Manipulation Duration, Swallowing Duration] 
+
+This section of code is the statistical analysis comparing each of the Trial Duration componants between the three treatments. For each componant (total time feeding, prey handling, and swallowing), the data is fitted with a GLMM model, with eel identity as a repeated measure...followed by estimated marginal means and pairwise comparisons. 
+
+```{r - Statistical Analysis of Trial Duration Componants}
+
+
+# --------------------------- #
+#    TOTAL FEEDING DURATION   #
+# --------------------------- #
+
+# Subset the data for "Trial Duration"
+TrialDur_Gamma <- DurSelP1 %>%
+  select(Eel, Treatment, Trial_Duration) %>%
+  mutate(Treatment = factor(Treatment),
+         Eel = factor(Eel),  # Convert Eel to a factor
+         Trial_Duration = as.numeric(Trial_Duration))
+
+
+# Fit the gamma GLMM with repeated measures
+TrialDurationGamma <- glmer(Trial_Duration ~ Treatment + (1 | Eel),
+                           data = TrialDur_Gamma,
+                           family = Gamma(link = "log"))
+
+# Print model summary
+summary(TrialDurationGamma)
+
+# Estimated marginal means and pairwise comparisons 
+TrialDurationEMMS <- emmeans(TrialDurationGamma, "Treatment")
+pairs(TrialDurationEMMS)
+emmeans:::cld.emmGrid(TrialDurationEMMS, Letters = letters)
+
+
+# --------------------------- #
+# TOTAL MANIPULATION DURATION #
+# --------------------------- #
+
+# Selecting Handling Duration and adding a small constant value to Handling_Dur to handle 0 values
+HandDur_Gamma <- DurSelP1 %>%
+  select(Eel, Treatment, Handling_Dur) %>%
+  mutate(Treatment = factor(Treatment),
+         Eel = factor(Eel),  
+         Handling_Dur = Handling_Dur + 0.001)  # Add a small constant value; rarely, eels would not manipulate prey but would bite and swallow in one movement; to remove 0 values from these isolated instances we added this constant 
+
+# Fit the gamma GLMM with random intercepts
+HandDurationGamma<- glmer(Handling_Dur ~ Treatment + (1 | Eel),
+                          data = HandDur_Gamma,
+                          family = Gamma(link = "log"))
+
+# Print model summary
+summary(HandDurationGamma)
+
+# Estimated marginal means and pairwise comparisons 
+HandDurationEMMS <- emmeans(HandDurationGamma, "Treatment")
+pairs(HandDurationEMMS)
+emmeans:::cld.emmGrid(HandDurationEMMS, Letters = letters)
+
+
+# --------------------------- #
+#     Pharyngeal Transport    #
+# --------------------------- #
+
+# Selecting Pharyngeal Transport duration and adding a small constant value to  Ptransport_Dur to handle 0 values
+PT_Gamma <- DurSelP1 %>%
+  select(Eel, Treatment, Ptransport_Dur) %>%
+  mutate(Treatment = factor(Treatment),
+         Eel = factor(Eel),  
+         Ptransport_Dur = Ptransport_Dur+ 0.001)  # Add a small constant value
+
+# Fit the gamma GLMM with random intercepts
+PTGamma<- glmer(Ptransport_Dur ~ Treatment + (1 | Eel),
+                          data = PT_Gamma,
+                          family = Gamma(link = "log"))
+
+# Print model summary
+summary(PTGamma)
+
+# Estimated marginal means and pairwise comparisons 
+PT_EMMS <- emmeans(PTGamma, "Treatment")
+pairs(PT_EMMS)
+emmeans:::cld.emmGrid(PT_EMMS, Letters = letters)
+
+```
+
+#Graphics - Durations of Trial Components 
+The next code makes the bar graphs for the trial duration components, comparing the durations feeding, handling prey, and swallowing between the three treatments (open, 10cm, 5cm)
+
+```{r - Trial Durations Graphics}
+
+#Naming the Future Facets: 
+Facet_Names_P1_Dur <- list(
+  'Trial_Duration' = "Total Feeding Duration",
+  'Handling_Dur' = "Prey Manipulation Duration",
+  'Ptransport_Dur' = "Swallowing Duration")
+
+Facet_labeller_P1_Dur <- function(variable,value){
+  return(Facet_Names_P1_Dur[value])
+}
+
+#The facets of the graph will be the different duration componants: Feeding, Handling, Swallowing
+
+#Making a plot
+P1_Dur_Graph = P1_Dur_SE %>% 
+  mutate(Treatment = fct_relevel(Treatment, "5cm", "10cm", "Open")) %>% 
+  mutate(Duration = fct_relevel(Duration, "Trial_Duration","Handling_Dur", "Ptransport_Dur")) %>% 
+  ggplot(aes(Treatment, mean, fill = Treatment)) + 
+  geom_bar(stat ="identity", 
+           color = "black", 
+           position = position_dodge()) +
+  # error bar 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), 
+                width = .25) + 
+  scale_fill_manual(values = c("darkslategray4","darkslategray3", "azure2")) +
+  #scale_x_discrete(labels=c("Small","Medium", "Large"))+
+  labs(y = "Mean Duration (Sec)", x = "") +
+  # facet wrap + the label code from above for our new label names
+  facet_wrap(. ~ Duration, labeller = Facet_labeller_P1_Dur, scales = "free") +
+  theme_classic() +
+  theme (axis.text.x = element_text(size = 15),
+        axis.text.y =  element_text(size = 15),
+        axis.title.y = element_text(size = 20),
+        legend.position="none",
+        panel.spacing.x = unit(2, "lines"),
+        plot.title = element_text(hjust =.5, size = 10, colour = "black"),
+        strip.background = element_rect(colour = "black", fill = "ivory3"),
+        strip.placement = "inside",
+        strip.text = element_text(size = 14, face="bold"))
+
+
+P1_Dur_Graph
+
+# Saves to reports folder within the project
+ggsave(filename = "P1-TrialComponents.png", plot = P1_Dur_Graph, width = 10, height = 5, dpi = 500)
+```
+
+
+
+# ⏰⏰⏰ BEHAVIOR DURATION
+
+This next chapter of code compares the time spent engaged in different prey manipulation behaviors between treatments. Because there was no significant difference in total manipulation time  (see previous) between treatments, we used the total duration engaged in each behavior (Example Column: Shaking_Duration), as opposed to proportional data (out of total feeding or handling time)
+
+# Data Prep - Duration of Behaviors
+
+```{r Experiment 1 - Data Prep - Average Durations of Behaviors (Not Proportion)}
+
+head(P1)
+
+#Selecting the columns we want:
+SelBehaviorDurationsP1 <- P1 %>%
+  select(Treatment, Eel, Shaking_Dur, Ramming_Dur, Knotting_Dur, Rotating_Dur) %>%
+  drop_na()
+
+head(SelBehaviorDurationsP1) 
+
+# Changing to long format 
+P1BehaviorDur_Long <- SelBehaviorDurationsP1 %>%
+  pivot_longer(cols = c(Shaking_Dur, Ramming_Dur, Knotting_Dur, Rotating_Dur), 
+               names_to = "Behavior", 
+               values_to = "Duration")
+
+
+#Calculating Mean & SE For Graphics
+P1BehaviorDurSE <- P1BehaviorDur_Long %>%
+  group_by(Treatment, Behavior) %>%
+  summarize(mean = mean(Duration, na.rm = TRUE),
+            sd = sd(Duration, na.rm = TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+P1BehaviorDurSE
+
+#Making treatment a factor:
+P1BehaviorDurSE$Treatment = factor(P1BehaviorDurSE$Treatment)
+```
+
+
+# Stats - Duration of Behaviors 
+
+The next code is the statistical analysis, comparing the time spent engaged in each behavior (ramming, rotating, shaking, knotting) between the treatments (open, 10cm, 5cm). To compare average duration spent engaged in each behavior, we fit the data for each behavior with a GLMM using a Tweedie distribution. The data is not normal and shows overdisperson making other distributions less suitable. The Tweedie distribution encompasses a wide range of distribution shapes and is also well suited for modeling continuous positive data inclusive of 0 values.
+
+Each behavior has an emoji header to quickly find each chunk. 
+
+``` {R Duration Stats -- TWEEDIE Includes 0 values }
+
+
+# 😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫
+#  ROTATING STATS
+# 😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫
+
+
+# Pulling out the ROTATING duration data
+RotatingTweedie <- P1BehaviorDur_Long %>% 
+  filter(Behavior == "Rotating_Dur")
+
+# Fit the model using glmmTMB
+RotatingTweedie_Mod  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                    data = RotatingTweedie,
+                                    family = tweedie)
+
+# Print the model summary
+summary(RotatingTweedie_Mod)
+
+# Estimated marginal means and pairwise comparisons 
+RotatingDurEMMS <- emmeans(RotatingTweedie_Mod, "Treatment")
+pairs(RotatingDurEMMS)
+emmeans:::cld.emmGrid(RotatingDurEMMS, Letters = letters)
+
+
+# 🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏
+#   RAMMING STATS
+# 🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏
+
+
+# Pulling out the RAMMING duration data
+RammingTweedie <- P1BehaviorDur_Long %>% 
+  filter(Behavior == "Ramming_Dur")
+
+# Fit the model using glmmTMB
+RammingTweedie_Mod  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                  data = RammingTweedie,
+                                  family = tweedie)
+
+# Print the model summary
+summary(RammingTweedie_Mod)
+
+# Estimated marginal means and pairwise comparisons 
+RammingDurEMMS <- emmeans(RammingTweedie_Mod, "Treatment")
+pairs(RammingDurEMMS)
+emmeans:::cld.emmGrid(RammingDurEMMS, Letters = letters)
+
+
+# 🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝
+#  SHAKING STATS 
+# 🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝
+
+# Pulling out the SHAKING DURATION Data
+ShakingTweedie <- P1BehaviorDur_Long %>% 
+  filter(Behavior == "Shaking_Dur")
+
+
+# Fit the model using glmmTMB
+ShakingTweedie_Mod  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                 data = ShakingTweedie,
+                                 family = tweedie)
+
+# Print the model summary
+summary(ShakingTweedie_Mod)
+
+# Estimated marginal means and pairwise comparisons 
+ShakingDurEMMS <- emmeans(ShakingTweedie_Mod, "Treatment")
+pairs(ShakingDurEMMS)
+emmeans:::cld.emmGrid(ShakingDurEMMS, Letters = letters)
+
+
+#🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢
+# KNOTTING STATS 
+#🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢🪢
+
+#Making treatment a factor:
+P1BehaviorDur_Long$Treatment = factor(P1BehaviorDur_Long$Treatment)
+
+
+# Pulling out the SHAKING DURATION Data
+KnottingTweedie <- P1BehaviorDur_Long %>% 
+  filter(Behavior == "Knotting_Dur") %>% 
+   mutate(Treatment = relevel(Treatment, ref = "Open"))
+
+
+# Fit the model using glmmTMB
+KnottingTweedie_Mod  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                 data = KnottingTweedie,
+                                 family = tweedie)
+
+# Print the model summary
+summary(KnottingTweedie_Mod)
+
+# Estimated marginal means and pairwise comparisons 
+KnottingDurEMMS <- emmeans(KnottingTweedie_Mod, "Treatment")
+pairs(KnottingDurEMMS)
+emmeans:::cld.emmGrid(KnottingDurEMMS, Letters = letters)
+
+```
+
+
+# Graphics - Duration of Behaviors 
+
+```{r PHASE 1: Graphics - Average Durations of Behaviors (Not Proportion) }
+
+# This graph shows the average DURATION spent in each behavior.
+# 0's have been left in the dataset 
+
+#Naming the Future Facets:
+Facet_Names_P1_BehaviorDur <- list(
+  'Knotting_Dur' = "KNOTTING",
+  'Ramming_Dur' = "RAMMING",
+  'Rotating_Dur' = "ROTATING",
+  'Shaking_Dur' = "SHAKING")
+
+Facet_labeller_BehaviorDur<- function(variable,value){
+  return(Facet_Names_P1_BehaviorDur[value])}
+
+#Wrangling some pictures for the future
+KnotPic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Knotting.png") 
+ShakePic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Shaking.png")
+RotatePic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Rotating.png")
+RamPic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Ramming.png")
+
+![Elephant](elephant.png)
+
+# Creating a data frame with pairwise significance: 
+p1_handdur_signif <- tribble(
+  ~Treatment, ~Behavior,     ~Signif,
+  "Open",   "Knotting_Dur", "a",    
+  "10cm",   "Knotting_Dur", "a",   
+  "5cm",    "Knotting_Dur", "a",    
+  "Open",    "Ramming_Dur", "a",    
+  "10cm",   "Ramming_Dur", "a",   
+  "5cm",    "Ramming_Dur", "a",   
+  "Open",    "Rotating_Dur", "b",    
+  "10cm",   "Rotating_Dur", "ab",   
+  "5cm",    "Rotating_Dur", "a",    
+  "Open",    "Shaking_Dur", "b",    
+  "10cm",   "Shaking_Dur", "ab",   
+  "5cm",    "Shaking_Dur", "a" 
+) %>% 
+  left_join(transmute(P1BehaviorDurSE, Treatment, Behavior, mean, se),
+            by = c("Treatment", "Behavior")) %>% 
+  mutate(Treatment = fct_relevel(Treatment, "5cm", "10cm", "Open"),
+         Behavior = factor(Behavior),
+         y = mean + se + 0.5)
+
+
+# The graph:
+P1_BehaviorDur = P1BehaviorDurSE %>% 
+  mutate(Treatment = fct_relevel(Treatment, "5cm", "10cm", "Open")) %>% 
+  ggplot(aes(Treatment, mean, fill = Treatment)) + 
+  geom_bar(stat ="identity", 
+           color = "black", 
+           position = position_dodge()) +
+  #Adding error bars: 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), 
+                width = .5) + 
+  #Adding Significance Labels
+  geom_text(aes(y = y, label = Signif), p1_handdur_signif, size =5) +
+  #All other aesthetics:
+  scale_fill_manual(values = c("darkslategray4", "darkslategray3", "azure2")) +
+  scale_x_discrete(labels=c("5cm","10cm", "Open"))+
+  labs(y = "Mean Duration in Behavior (Sec)", x = "Treatment") +
+  facet_wrap(. ~ Behavior, labeller = Facet_labeller_BehaviorDur) +
+  theme_classic() +
+  theme (axis.text.x = element_text(size = 15),
+         axis.text.y =  element_text(size = 15),
+         axis.title.x = element_text(size = 20),
+         axis.title.y = element_text(size = 20),
+        legend.position="none",
+        panel.spacing.x = unit(2, "lines"),
+        plot.title = element_text(hjust =.5, size = 40, colour = "black"),
+        strip.background = element_rect(colour = "black", fill = "ivory3"),
+        strip.placement = "inside",
+        strip.text = element_text(size = 14, face = "bold"))
+
+P1_BehaviorDur
+
+
+P1_BehaviorDur_Pics <- ggdraw(P1_BehaviorDur) +
+draw_image(KnotPic, x=0.35 , y=0.89, hjust = 1, vjust =1, height = .17, width
+=.17) +
+draw_image(RamPic, x=0.85 , y=0.89, hjust = 1, vjust =1, height = .2, width
+=.2 ) +
+draw_image(RotatePic, x=0.43 , y=0.5, hjust = 1, vjust =1, height = .24, width
+=.24 ) +
+draw_image(ShakePic, x=0.86 , y=0.46, hjust = 1, vjust =1, height = .2, width
+=.2 ) 
+
+P1_BehaviorDur_Pics 
+
+ggsave(filename = "P1-BehaviorDuration.png", plot = P1_BehaviorDur_Pics, width = 10, height = 5, dpi = 300)
+```
+
+
+# ------------------------------------
+# Experiment 1 - FINAL FIGURE Graphic
+# -----------------------------------
+
+
+The code below combines the Trial Component Figure with the Behavior Duration Figure for Experiment 1
+
+``` {R Final Figure}
+
+P1_FinalFigure <- ggarrange(P1_Dur_Graph, P1_BehaviorDur_Pics,
+                    labels = c("A", "B"),
+                    ncol = 1, nrow = 2,
+                    heights = c(0.25, 0.5))
+P1_FinalFigure
+
+
+ggsave(filename = "P1_Final.png", plot = P1_FinalFigure, width = 11, height = 10, dpi = 300)
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+
+
+
+
+# EXPERIMENT 2: Enclosed Spatial Trials 
+
+In Experiment 2, our aim was to document the spatial threshold relative to eel size that might limit more three-dimensional movement (i.e. knotting). Treatments (small, medium, and large) were scaled to individual diameters of the moray. The large treatment was 2 x the eel diameter, the medium treatment 1.5 x the eel’s diameter,and the small treatment we scaled to be the exact diameter of the eel plus 10% of the eel’s diameter. 
+
+We included two new behaviors in our analysis: tail and body anchoring
+
+```{r Phase 2: Data Prep}
+#Reading in the dataset
+P2 <- read_csv(here::here("data/Phase2-SpatialContext2.csv"))
+
+head(P2) 
+```
+P2 data contains:
+Treatment = 'small', 'medium', 'large'
+Eel = name of the individual
+Treatment_Round = individual's exposure to the treatment (1st time, 2nd time, etc.)
+Trial_Duration = Duration of time in seconds from first bite to completion of swallowing
+Handling_Duration = Time in seconds spent engaged in at least one of the prey manipulation behaviors 
+PT_Duration = The duration of time in seconds engaged in swallowing (pharyngeal transport)
+
+All behaviors (shaking, ramming, rotating, knotting, crinkle, anchor, tug) have three columns: 
+Example - Shaking_Dur = the total duration spent shaking
+          Shaking_Prop = Proportion of time spent shaking out of the total Trial_Duration
+          Shaking_Prop_Handling = Proportion of time spent shaking out of the total Handling_Dur
+
+- Tug was not included in analysis, as it could not be fully seperated from other behaviors
+- 'crinkle' in the data set is code for 'body anchoring' in the manuscript; where an eel forms a 'w' shape, pressing on the tube walls. 
+- 'anchor' in the data set refers specifically to tail anchoring 
+
+Knotting_Binomial = was knotting observed, yes/no
+
+
+## ⌛️⌛️⌛️ TRIAL COMPONENT DURATION
+
+This section of code focuses on the total feeding time (Trial_Duration), the time spent handling prey (Handling_Duration), and the time spent swallowing prey (PT_Duration) between treatments (small, medium, large)
+
+#Data Prep - Duration of Trial Components 
+```{r Phase 2: Duration of Trial Components -- Data Prep}
+#Selecting the columns we want:
+DurSelP2 <- P2 %>%
+  select(Treatment, Eel, Trial_Duration, PT_Duration, Handling_Dur) %>%
+  drop_na()
+
+head(DurSelP2) 
+
+
+#Making treatment a factor:
+DurSelP2$Treatment = factor(DurSelP2$Treatment)
+
+## Prepping a dataframe for Graphics 
+P2_Dur_Long <- DurSelP2 %>%
+  pivot_longer(cols = c(Trial_Duration, PT_Duration, Handling_Dur), 
+               names_to = "Duration", 
+               values_to = "Time")
+
+#Making Duration a factor:
+P2_Dur_Long$Duration = factor(P2_Dur_Long$Duration)
+
+head(P2_Dur_Long)
+
+
+## Calculating Mean & SE For Graphics - This code is used to create future bar graphs comparing the mean time spent engaged in feeding, prey handling, and swallowing between treatments
+P2_Dur_SE = P2_Dur_Long %>%
+  group_by(Duration, Treatment) %>%
+  summarize(mean = mean(Time, na.rm = TRUE),
+            sd = sd(Time, na.rm = TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+head(P2_Dur_SE)
+
+
+# --- Getting MEANS & SE for each Individual Duration Category --------------------------
+
+# --------------------------- #
+# TOTAL FEEDING DURATION
+# --------------------------- #
+
+P2_Feed_SE=DurSelP2 %>%  
+  group_by(Treatment) %>% #
+  summarize(mean=mean(Trial_Duration, na.rm=TRUE),
+            sd=sd(Trial_Duration, na.rm=TRUE),
+            n=n(),
+            se=sd/sqrt(n))
+
+P2_Feed_SE
+
+# --------------------------- #
+# HANDLING DURATION
+# --------------------------- #
+
+P2_Hand_SE=DurSelP2%>%  
+  group_by(Treatment) %>% #
+  summarize(mean=mean(Handling_Dur, na.rm=TRUE),
+            sd=sd(Handling_Dur, na.rm=TRUE),
+            n=n(),
+            se=sd/sqrt(n))
+
+P2_Hand_SE
+
+# --------------------------- #
+# SWALLOWING DURATION
+# --------------------------- #
+
+P2_Swallow_SE = DurSelP2 %>%
+  group_by(Treatment) %>%
+  summarize(mean = mean( PT_Duration, na.rm = TRUE),
+            sd = sd(PT_Duration, na.rm = TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+P2_Swallow_SE 
+```
+
+#Stats - Duration of Trial Components 
+
+This section of code is the statistical analysis comparing each of the Trial Duration componants between the three treatments. For each componant (total time feeding, prey handling, and swallowing), the data is fitted with a GLMM model, with eel identity as a repeated measure...followed by estimated marginal means and pairwise comparisons. 
+
+```{r Phase 2 - Stats - Duration of Trial Components}
+
+# Subset the data for "Trial Duration"
+TrialDur2_Gamma <- DurSelP2 %>%
+  select(Eel, Treatment, Trial_Duration) %>%
+  mutate(Treatment = factor(Treatment),
+         Eel = factor(Eel),  # Convert Eel to a factor
+         Trial_Duration = as.numeric(Trial_Duration))
+
+
+# Fit the gamma GLMM with repeated measures, adjusting optimization settings
+TrialDuration2Gamma <- glmer(Trial_Duration ~ Treatment + (1 | Eel),
+                           data = TrialDur2_Gamma,
+                           family = Gamma(link = "log"))
+ 
+# Print model summary
+summary(TrialDuration2Gamma)
+
+TrialDuration2EMMS <- emmeans(TrialDuration2Gamma, "Treatment")
+pairs(TrialDuration2EMMS)
+emmeans:::cld.emmGrid(TrialDuration2EMMS, Letters = letters)
+
+
+
+# Handling Duration  #
+
+# Add a small constant value to Handling_Dur to handle 0 values
+HandDur2_Gamma <- DurSelP2 %>%
+  select(Eel, Treatment, Handling_Dur) %>%
+  mutate(Treatment = factor(Treatment),
+         Eel = factor(Eel),  
+         Handling_Dur = Handling_Dur + 0.001)  # Add a small constant value
+
+# Fit the gamma GLMM with random intercepts
+HandDuration2Gamma<- glmer(Handling_Dur ~ Treatment + (1 | Eel),
+                          data = HandDur2_Gamma,
+                          family = Gamma(link = "log"))
+
+# Print model summary
+summary(HandDuration2Gamma)
+
+
+HandDuration2EMMS <- emmeans(HandDuration2Gamma, "Treatment")
+pairs(HandDuration2EMMS)
+emmeans:::cld.emmGrid(HandDuration2EMMS, Letters = letters)
+
+
+# Pharyngeal Transport #
+
+PT2_Gamma <- DurSelP2 %>%
+  select(Eel, Treatment, PT_Duration) %>%
+  mutate(Treatment = factor(Treatment),
+         Eel = factor(Eel),  
+         PT_Duration = PT_Duration + 0.001)  # Add a small constant value
+
+# Fit the gamma GLMM with random intercepts
+PT2Gamma<- glmer(PT_Duration ~ Treatment + (1 | Eel),
+                          data = PT2_Gamma,
+                          family = Gamma(link = "log"))
+
+# Print model summary
+summary(PT2Gamma)
+
+
+PT2_EMMS <- emmeans(PT2Gamma, "Treatment")
+pairs(PT2_EMMS)
+emmeans:::cld.emmGrid(PT2_EMMS, Letters = letters)
+```
+
+# Graphics - Duration of Trial Components 
+
+The next code makes the bar graphs for the trial duration components, comparing the durations feeding, handling prey, and swallowing between the three treatments (small, medium, large). 
+
+```{r Phase 2 - Graphics - Duration of Trial Components }
+#GRAPH FACETS = DURATIONS 
+
+#Naming the Future Facets
+Facet_Names_P2_Dur <- list(
+  'Trial_Duration' = "Total Feeding Duration",
+  'Handling_Dur' = "Prey Manipulation Duration",
+  'PT_Duration' = "Swallowing Duration")
+
+Facet_labeller_P2_Dur <- function(variable,value){
+  return(Facet_Names_P2_Dur[value])
+}
+
+
+#Making a plot
+
+P2_Dur_Graph = P2_Dur_SE %>% 
+  mutate(Treatment = fct_relevel(Treatment, "Small", "Medium", "Large")) %>% 
+  mutate(Duration = fct_relevel(Duration, "Trial_Duration","Handling_Dur", "PT_Duration")) %>% 
+  ggplot(aes(Treatment, mean, fill = Treatment)) + 
+  geom_bar(stat ="identity", 
+           color = "black", 
+           position = position_dodge()) +
+  # error bar 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), 
+                width = .25) + 
+  scale_fill_manual(values = c("darkslategray4","darkslategray3", "azure2")) +
+  labs(y = "Mean Duration (Sec)", x = "") +
+  # facet wrap + the label code from above for our new label names
+  facet_wrap(. ~ Duration, labeller = Facet_labeller_P2_Dur, scales = "free") +
+  theme_classic() +
+theme (axis.text.x = element_text(size = 15),
+        axis.text.y =  element_text(size = 15),
+        axis.title.y = element_text(size = 20),
+        legend.position="none",
+        panel.spacing.x = unit(2, "lines"),
+        strip.background = element_rect(colour = "black", fill = "ivory3"),
+        strip.placement = "inside",
+        strip.text = element_text(size = 14, face = "bold"))
+
+P2_Dur_Graph
+
+# Saves to reports folder within the project
+ggsave(filename = "P2-Trial Components.png", plot = P2_Dur_Graph, width = 11, height = 5, dpi = 300)
+
+```
+
+## ⏰ ⏰ ⏰  BEHAVIOR DURATION
+
+This next chapter of code compares the time spent engaged in different prey manipulation behaviors between treatments. Because there was no significant difference in total manipulation time  (see previous) between treatments, we used the total duration engaged in each behavior (Example Column: 'Shaking_Duration'), as opposed to proportional data (out of total feeding or handling time)
+
+# Data Prep - Duration of Behaviors 
+```{r PHASE 2: Data Prep - Average Durations of Behaviors (Not Proportion) }
+head(P2)
+
+#Selecting the columns we want:
+SelBehaviorDurationsP2 <- P2 %>%
+  select(Treatment, Eel, Shaking_Duration, Ramming_Duration, Knotting_Duration, Rotating_Duration, Anchor_Duration, Crinkle_Duration) %>%
+  drop_na()
+
+head(SelBehaviorDurationsP2) 
+
+
+P2BehaviorDur_Long <- SelBehaviorDurationsP2 %>%
+  pivot_longer(cols = c(Shaking_Duration, Ramming_Duration, Knotting_Duration, Rotating_Duration, Anchor_Duration, Crinkle_Duration), 
+               names_to = "Behavior", 
+               values_to = "Duration")
+
+#Calculating Mean & SE - 0's included
+P2BehaviorDurSE = P2BehaviorDur_Long %>%
+  group_by(Treatment, Behavior) %>%
+  summarize(mean = mean(Duration, na.rm = TRUE),
+            sd = sd(Duration, na.rm = TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+P2BehaviorDurSE
+
+#Making treatment a factor:
+P2BehaviorDurSE$Treatment = factor(P2BehaviorDurSE$Treatment)
+
+```
+
+# Stats - Duration of Behaviors 
+
+The next code is the statistical analysis, comparing the time spent engaged in each behavior (ramming, rotating, shaking, knotting, body anchoring [aka 'crinkle'], and tail anchoring [aka 'anchor']) between the treatments (small, medium, large). To compare average duration spent engaged in each behavior, we fit the data for each behavior with a GLMM using a Tweedie distribution. The data is not normal and shows over disperson making other distributions less suitable. The Tweedie distribution encompasses a wide range of distribution shapes and is also well suited for modeling continuous positive data inclusive of 0 values.
+
+Each behavior has an emoji header to quickly find each chunk. 
+
+``` {R - PHASE 2 TWEEDIE STATS }
+
+
+#️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️
+#                                                       BODY ANCHOR STATS 
+#️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓⚓️⚓️⚓️⚓️️⚓⚓️️⚓️⚓️️⚓⚓️⚓️
+
+# Pulling out the BODY ANCHORING duration data
+BodyAnchorTweedie <- P2BehaviorDur_Long %>% 
+  filter(Behavior == "Crinkle_Duration")
+
+
+# Fit the model using glmmTMB
+BodyAnchorTweedie_Model  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                     data = BodyAnchorTweedie,
+                                     family = tweedie)
+
+# Print the model summary
+summary(BodyAnchorTweedie_Model)
+
+# Estimated marginal means and pairwise comparisons 
+BodyAnchorDurEMMS <- emmeans(BodyAnchorTweedie_Model, "Treatment")
+pairs(BodyAnchorDurEMMS)
+emmeans:::cld.emmGrid(BodyAnchorDurEMMS, Letters = letters)
+
+
+#️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️
+#                                                       TAIL ANCHOR STATS 
+#️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓️⚓️⚓️⚓️⚓️️⚓⚓️⚓️⚓️⚓⚓⚓️⚓️⚓️⚓⚓️⚓️️⚓️⚓⚓️⚓️⚓️⚓️️
+
+
+# Pulling out the TAIL ANCHOR duration data
+TailAnchorTweedie <- P2BehaviorDur_Long %>% 
+  filter(Behavior == "Anchor_Duration")
+
+# Fit the model using glmmTMB
+TailAnchorTweedie_Model  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                    data = TailAnchorTweedie,
+                                    family = tweedie)
+
+# Print the model summary
+summary(TailAnchorTweedie_Model)
+
+# Estimated marginal means and pairwise comparisons 
+TailAnchorDurEMMS <- emmeans(TailAnchorTweedie_Model, "Treatment")
+pairs(TailAnchorDurEMMS)
+emmeans:::cld.emmGrid(TailAnchorDurEMMS, Letters = letters)
+
+
+
+# 😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫
+#                                                             ROTATING STATS
+# 😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫-😵‍💫
+
+
+# Pulling out the ROTATING duration data
+RotatingTweedie <- P2BehaviorDur_Long %>% 
+  filter(Behavior == "Rotating_Duration")
+
+# Fit the model using glmmTMB
+RotatingTweedie_Model  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                    data = RotatingTweedie,
+                                    family = tweedie)
+
+# Print the model summary
+summary(RotatingTweedie_Model)
+
+# Estimated marginal means and pairwise comparisons 
+RotatingDurEMMS <- emmeans(RotatingTweedie_Model, "Treatment")
+pairs(RotatingDurEMMS)
+emmeans:::cld.emmGrid(RotatingDurEMMS, Letters = letters)
+
+
+# 🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏
+#                                                                 RAMMING STATS
+# 🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏🐏
+
+
+# Pulling out the RAMMING duration data
+RammingTweedie <- P2BehaviorDur_Long %>% 
+  filter(Behavior == "Ramming_Duration")
+
+# Fit the model using glmmTMB
+RammingTweedie_Model  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                  data = RammingTweedie,
+                                  family = tweedie)
+
+# Print the model summary
+summary(RammingTweedie_Model)
+
+# Estimated marginal means and pairwise comparisons 
+RammingDurEMMS <- emmeans(RammingTweedie_Model, "Treatment")
+pairs(RammingDurEMMS)
+emmeans:::cld.emmGrid(RammingDurEMMS, Letters = letters)
+
+
+# 🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝
+#                                                              SHAKING STATS 
+# 🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝🤝
+
+# Pulling out the SHAKING DURATION Data
+ShakingTweedie <- P2BehaviorDur_Long %>% 
+  filter(Behavior == "Shaking_Duration")
+
+
+# Fit the model using glmmTMB
+ShakingTweedie_Model  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                 data = ShakingTweedie,
+                                 family = tweedie)
+
+# Print the model summary
+summary(ShakingTweedie_Model)
+
+# Estimated marginal means and pairwise comparisons 
+ShakingDurEMMS <- emmeans(ShakingTweedie_Model, "Treatment")
+pairs(ShakingDurEMMS)
+emmeans:::cld.emmGrid(ShakingDurEMMS, Letters = letters)
+
+```
+
+# Graphics - Duration of Behaviors 
+
+```{r PHASE 2: Graphics - Average Durations of Behaviors (Not Proportion) - All data}
+
+# This graph shows the average DURATION spent in each behavior.
+# 0's have been left in the data set 
+
+#Naming the Future Facets:
+Facet_Names_P2_BehaviorDur <- list(
+  'Knotting_Duration' = "KNOTTING",
+  'Ramming_Duration' = "RAMMING",
+  'Rotating_Duration' = "ROTATING",
+  'Shaking_Duration' = "SHAKING",
+  'Crinkle_Duration' = "BODY ANCHOR",
+  'Anchor_Duration' = "TAIL ANCHOR"
+  )
+
+Facet_labeller_BehaviorDur2<- function(variable,value){
+  return(Facet_Names_P2_BehaviorDur[value])}
+
+
+#Wrangling some pictures for the future
+#Wrangling some pictures for the future
+KnotPic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Knotting.png") 
+ShakePic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Shaking.png")
+RotatePic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Rotating.png")
+RamPic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Ramming.png")
+BodyAnchorPic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/bodyanchor.png")
+TailAnchorPic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/tailanchor.png")
+
+
+# Creating a data frame with pairwise significance 
+P2_signif <- tribble(
+  ~Treatment, ~Behavior,          ~Signif,
+  "Large",    "Anchor_Duration", "b",    
+  "Medium",   "Anchor_Duration", "b",   
+  "Small",    "Anchor_Duration", "a",    
+  "Large",    "Crinkle_Duration", "b",    
+  "Medium",   "Crinkle_Duration", "a",   
+  "Small",    "Crinkle_Duration", "a",    
+  "Large",    "Knotting_Duration", "***",    
+  "Medium",   "Knotting_Duration", "",   
+  "Small",    "Knotting_Duration", "",    
+  "Large",    "Ramming_Duration", "a",    
+  "Medium",   "Ramming_Duration", "a",   
+  "Small",    "Ramming_Duration", "a",   
+  "Large",    "Rotating_Duration", "a",    
+  "Medium",   "Rotating_Duration", "a",   
+  "Small",    "Rotating_Duration", "a",    
+  "Large",    "Shaking_Duration", "a",    
+  "Medium",   "Shaking_Duration", "a",   
+  "Small",    "Shaking_Duration", "a") %>% 
+  left_join(transmute(P2BehaviorDurSE, Treatment, Behavior, mean, se),
+            by = c("Treatment", "Behavior")) %>% 
+  mutate(Treatment = fct_relevel(Treatment, "Small", "Medium", "Large"),
+         Behavior = factor(Behavior),
+         y = mean + se + 2)
+
+# The graph:
+P2_BehaviorDur = P2BehaviorDurSE %>% 
+  mutate(Treatment = fct_relevel(Treatment, "Small", "Medium", "Large")) %>% 
+  ggplot(aes(Treatment, mean, fill = Treatment)) + 
+  geom_bar(stat ="identity", 
+           color = "black", 
+           position = position_dodge()) +
+  #Adding error bars: 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), 
+                width = .5) + 
+  #ADD SIGNIFICANCE TEXT
+  geom_text(aes(y = y, label = Signif), P2_signif, size=6, face="bold") +
+  #All other aesthetics:
+  scale_fill_manual(values = c("darkslategray4", "darkslategray3", "azure2")) +
+  scale_x_discrete(labels=c("Small", "Medium", "Large"))+
+  ylim(0, 20)+
+  labs(y = "Average Duration (Sec)", x = "Treatment") +
+  facet_wrap(. ~ Behavior, labeller = Facet_labeller_BehaviorDur2) +
+  theme_classic() +
+  theme (axis.text.x = element_text(size = 15),
+         axis.text.y =  element_text(size = 15),
+         axis.title.x = element_text(size = 20, margin = margin(t = 10, r = 20, b = 0, l = 0)),
+         axis.title.y = element_text(size = 20),
+        legend.position="none",
+        panel.spacing.x = unit(2, "lines"),
+        plot.title = element_text(hjust =.5, size = 40, colour = "black"),
+        strip.background = element_rect(colour = "black", fill = "ivory3"),
+        strip.placement = "inside",
+        strip.text = element_text(size = 14, face = "bold"))
+
+P2_BehaviorDur
+
+
+P2_BehaviorDur_Pics <- ggdraw(P2_BehaviorDur) +
+draw_image(TailAnchorPic, x=0.31 , y=0.92, hjust = 1, vjust =1, height = .19, width
+=.19) +
+draw_image(BodyAnchorPic, x=0.62 , y=0.94, hjust = 1, vjust =1, height = .17, width
+=.17) +
+draw_image(KnotPic, x=0.95 , y=0.9, hjust = 1, vjust =1, height = .2, width
+=.2 ) +
+draw_image(RamPic, x=0.29 , y=0.45, hjust = 1, vjust =1, height = .17, width
+=.17) +
+draw_image(RotatePic, x=0.659 , y=0.54, hjust = 1, vjust =1, height = .23, width
+=.23 ) +
+draw_image(ShakePic, x=0.95 , y=0.45, hjust = 1, vjust =1, height = .2, width
+=.2 )
+
+P2_BehaviorDur_Pics 
+
+#Saves to Reports folder within the project folder
+ggsave(filename = "P2-Behavior Durations.png", plot = P2_BehaviorDur_Pics , width = 10, height = 7, dpi = 300)
+
+```
+
+# ----------------------------
+# Experiment 2 - FINAL FIGURE
+# ---------------------------
+
+The code below combines the Trial Component Figure with the Behavior Duration Figure for Experiment 2
+
+``` {R Final Figure}
+
+P2_FinalFigure <- ggarrange(P2_Dur_Graph, P2_BehaviorDur_Pics,
+                    labels = c("A", "B"),
+                    ncol = 1, nrow = 2,
+                    heights = c(0.25, 0.5))
+P2_FinalFigure
+
+
+ggsave(filename = "P2_Final.png", plot = P2_FinalFigure, width = 11, height = 10, dpi = 300)
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~
+# BONUS FEATURES
+#~~~~~~~~~~~~~~~~~~~~
+
+# Experiment 1 & 2 Combined
+
+The following code combines data from experiments 1 and 2. We wanted to compare the durations spent engaged in different behaviors between the open treatment (experiment 1) and all three diameter-based treatments from experiment 2 (small, medium, large)
+
+# Data Prep - Bonus 
+``` {R Open + Diameter-Based Treatments Set Up}
+#Reading in the dataset
+
+Bonus = read_csv(here::here("data/Phase2-SpatialContext+Open.csv")) 
+
+head(Bonus) 
+```
+
+
+```{r}
+#Selecting the columns we want:
+BonusSel <- Bonus %>%
+  select(Treatment, Eel, Ramming_Duration, Shaking_Duration, Rotating_Duration, Knotting_Duration) %>%
+  drop_na()
+
+head(BonusSel) 
+
+#Making stuff a factor:
+BonusSel$Treatment = factor(BonusSel$Treatment)
+BonusSel$Eel = factor(BonusSel$Eel)
+
+
+Bonus_Long <- BonusSel %>%
+  pivot_longer(cols = c(Shaking_Duration, Ramming_Duration, Knotting_Duration, Rotating_Duration), 
+               names_to = "Behavior", 
+               values_to = "Duration")
+
+head(Bonus_Long)
+
+#Calculating Mean & SE 
+BonusSE = Bonus_Long %>%
+  group_by(Treatment, Behavior) %>%
+  summarize(mean = mean(Duration, na.rm = TRUE),
+            sd = sd(Duration, na.rm = TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+head(BonusSE)
+
+```
+
+
+#Bonus Stats
+
+The following code compares the durations spent engaged in shaking, ramming, rotating, and knotting between the open and diameter based treatments (small, medium, large)
+``` {R Bonus Stats}
+
+###################
+## SHAKING DURATION
+###################
+
+BonusShaking <- Bonus_Long %>% 
+  filter(Behavior == "Shaking_Duration") 
+
+
+# Fit the model using glmmTMB
+BonusShakingTweedie_Model  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                     data = BonusShaking,
+                                     family = tweedie)
+
+# Print the model summary
+summary(BonusShakingTweedie_Model)
+
+BonusShakingDurEMMS <- emmeans(BonusShakingTweedie_Model, "Treatment")
+pairs(BonusShakingDurEMMS)
+emmeans:::cld.emmGrid(BonusShakingDurEMMS, Letters = letters)
+
+
+###################
+## RAMMING DURATION
+###################
+
+BonusRamming <- Bonus_Long  %>% 
+  filter(Behavior == "Ramming_Duration")
+
+
+BonusRammingTweedie_Model  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                     data = BonusRamming,
+                                     family = tweedie)
+
+# Print model summary
+summary(BonusRammingTweedie_Model)
+
+BonusRammingDurEMMS <- emmeans(BonusRammingTweedie_Model, "Treatment")
+pairs(BonusRammingDurEMMS)
+emmeans:::cld.emmGrid(BonusRammingDurEMMS, Letters = letters)
+
+
+
+####################
+## ROTATING DURATION
+####################
+
+BonusRotating <-  Bonus_Long   %>% 
+  filter(Behavior == "Rotating_Duration")
+
+BonusRotatingTweedie_Model  <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                     data = BonusRotating,
+                                     family = tweedie)
+# Print model summary
+summary(BonusRotatingTweedie_Model)
+
+Bonus_RotatingDurEMMS <- emmeans(BonusRotatingTweedie_Model, "Treatment")
+pairs(Bonus_RotatingDurEMMS )
+emmeans:::cld.emmGrid(Bonus_RotatingDurEMMS , Letters = letters)
+
+
+####################
+## KNOTTING DURATION 
+####################
+
+Bonus_Knotting <- Bonus_Long %>% 
+  filter(Behavior == "Knotting_Duration")
+
+# Fit the gamma GLMM with repeated measures
+BonusKnottingTweedie_Model <- glmmTMB(Duration ~ Treatment + (1 | Eel),
+                                     data = Bonus_Knotting,
+                                     family = tweedie)
+# Print model summary
+summary(BonusKnottingTweedie_Model)
+
+Bonus_KnottingDurEMMS <- emmeans(BonusKnottingTweedie_Model, "Treatment")
+pairs(Bonus_KnottingDurEMMS )
+emmeans:::cld.emmGrid(Bonus_KnottingDurEMMS , Letters = letters)
+
+```
+
+# Bonus Graphics 
+
+The following code graphs the behaviors that showed interesting results (knotting and rotating)
+
+```{R Bonus Graphics}
+
+BonusGraphData <- BonusSE %>% 
+ filter(Behavior %in% c("Knotting_Duration", "Rotating_Duration"))
+
+# Creating a data frame with pairwise significance 
+Bonus_signif <- tribble(
+  ~Treatment, ~Behavior,          ~Signif,
+  "Open",     "Knotting_Duration", "a",
+  "Large",    "Knotting_Duration", "a",    
+  "Medium",   "Knotting_Duration",  "", 
+  "Small",    "Knotting_Duration",  "",
+  "Open",     "Rotating_Duration", "b",
+  "Large",    "Rotating_Duration", "a",    
+  "Medium",   "Rotating_Duration", "a",   
+  "Small",    "Rotating_Duration", "a"
+  ) %>% 
+  left_join(transmute(BonusGraphData, Treatment, Behavior, mean, se),
+            by = c("Treatment", "Behavior")) %>% 
+  mutate(Treatment = fct_relevel(Treatment, "Small", "Medium", "Large", "Open"),
+         Behavior = factor(Behavior),
+         y = mean + se + 1)
+
+
+#Naming the Future Facets:
+Facet_Names_Bonus <- list(
+  'Knotting_Duration' = "KNOTTING",
+  'Rotating_Duration' = "ROTATING"
+  )
+
+Facet_labeller_Bonus <- function(variable,value){
+  return(Facet_Names_Bonus[value])}
+
+
+#Wrangling some pictures for the future
+KnotPic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Knotting.png") 
+RotatePic = here::here("/Users/mayamcelfish/Desktop/ArrRrrr/SpatialContext_PreyManipulation/images/Rotating.png")
+
+# The graph:
+BonusGraph = BonusGraphData %>% 
+  mutate(Treatment = fct_relevel(Treatment, "Small", "Medium", "Large", "Open")) %>% 
+  ggplot(aes(Treatment, mean, fill = Treatment)) + 
+  geom_bar(stat ="identity", 
+           color = "black", 
+           position = position_dodge()) +
+  #Adding error bars: 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), 
+                width = .5) + 
+  #ADD SIGNIFICANCE TEXT
+  geom_text(aes(y = y, label = Signif), Bonus_signif, size=6, face="bold") +
+  #All other aesthetics:
+  scale_fill_manual(values = c("darkslategray4", "darkslategray3", "azure2", "white")) +
+  scale_x_discrete(labels=c("Small", "Medium", "Large", "Open"))+
+  ylim(0, 25)+
+  labs(y = "Average Duration (Sec)", x = "Treatment") +
+  facet_wrap(. ~ Behavior, labeller = Facet_labeller_Bonus) +
+  theme_classic() +
+  theme (axis.text.x = element_text(size = 15),
+         axis.text.y =  element_text(size = 15),
+         axis.title.x = element_text(size = 20, margin = margin(t = 10, r = 20, b = 0, l = 0)),
+         axis.title.y = element_text(size = 20),
+        legend.position="none",
+        panel.spacing.x = unit(2, "lines"),
+        plot.title = element_text(hjust =.5, size = 40, colour = "black"),
+        strip.background = element_rect(colour = "black", fill = "ivory3"),
+        strip.placement = "inside",
+        strip.text = element_text(size = 14, face = "bold"))
+
+
+BonusGraph
+
+
+Bonus_Pics <- ggdraw(BonusGraph) +
+draw_image(KnotPic, x=0.4 , y=0.86, hjust = 1, vjust =1, height = .25, width
+=.25 ) +
+draw_image(RotatePic, x=0.93 , y=0.9, hjust = 1, vjust =1, height = .3, width
+=.3 ) 
+
+Bonus_Pics
+
+# This saves to the reports folder within the project
+ggsave(filename = "BonusGraphic.png", plot = Bonus_Pics , width = 10, height = 5, dpi = 300)
+
+```
+
+
+# 🏎💨  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ROTATION SPEED 
+# 🏎💨 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Rotation Data Set-Up
+
+The following code reads in the data set for rotating speed
+``` {R is for Rotate}
+#Reading in the dataset
+
+Rot=read.csv(here::here("data/Rotation_Complete.csv"))
+
+head(Rot) 
+
+```
+
+The followig code calculated the mean and standard error for rotating speed
+
+```{r - Calc Mean & SE for Rotating Speed}
+#Making things factors:
+Rot $ Treatment = factor(Rot $ Treatment)
+Rot $ Eel = factor(Rot $ Eel)
+
+
+#Calculating Mean & SE 
+Rot_SE = Rot %>%
+  group_by(Treatment) %>%
+  summarize(mean = mean(Rotation_Second, na.rm = TRUE),
+            sd = sd(Rotation_Second, na.rm = TRUE),
+            n = n(),
+            se = sd/sqrt(n))
+
+Rot_SE
+```
+
+# Rotation Speed Stats 
+To compare rotation speed between treatments, we log-transformed the data and employed a mixed-effects model with a gamma distribution. We incorporated individual eels as a repeated measure by including eel identity as a random effect to account for variability between individuals. 
+
+```{r Phase 2 - Stats - Rotation Speed Data}
+head(Rot)
+
+# Log-transform the Rotation_Duration variable
+Rot <- Rot %>% 
+  mutate(Log_Rotation_Second= log(Rotation_Second + 1))  # Adding 1 to avoid log(0)
+
+
+# Fit the gamma GLMM with repeated measures, adjusting optimization settings
+RotGamma <- glmer(Rotation_Second ~ Treatment + (1 | Eel),
+                  data = Rot,
+                  family = Gamma(link = "log"))
+ 
+# Print model summary
+summary(RotGamma)
+
+RotEMMS <- emmeans(RotGamma, "Treatment")
+pairs(RotEMMS)
+emmeans:::cld.emmGrid(RotEMMS, Letters = letters)
+
+```
+
+# Graphics - Rotation Speeds 
+```{r Rotation Graphics}
+#Telling the bars to go from Small to Medium to Large instead of alphabetical 
+Rot_SE$Treatment <- factor(Rot_SE$Treatment, levels=c("Small", "Medium", "Large","Open"))
+
+
+# Step 1: create a data frame with pairwise significance 
+# This is a dummy, adjust once you have the actual results
+Rot_signif <- tribble(
+  ~Treatment,   ~Signif,
+  "Open",      "c",
+  "Large",     "b",    
+  "Medium",    "a",   
+  "Small",     "a",    
+ ) %>% 
+  left_join(transmute(Rot_SE, Treatment, mean, se),
+            by = c("Treatment")) %>% 
+  mutate(Treatment = fct_relevel(Treatment, "Small", "Medium", "Large", "Open"),
+         y = mean + se + .15)
+
+
+Rot_Graph = Rot_SE %>% 
+  mutate(Treatment = fct_relevel(Treatment, "Small", "Medium", "Large", "Open")) %>% 
+  ggplot(aes(Treatment, mean, fill = Treatment)) + 
+  geom_bar(stat ="identity", 
+           color = "black", 
+           width = 0.7,
+           position = position_dodge()) +
+  # error bar 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), 
+                width = .25) + 
+  # STEP 2: ADD SIGNIFICANCE TEXT
+  geom_text(aes(y = y, label = Signif), Rot_signif, size=6, face="bold") +
+  scale_fill_manual(values = c("darkslategray4","darkslategray3", "azure2", "white")) +
+  scale_x_discrete(labels=c("Small","Medium", "Large", "Open"))+
+  labs(y = "Mean Rotation Speed (Rotations/Sec)", x = "Treatment", title = "") +
+  # facet wrap + the label code from above for our new label names
+  theme_classic() +
+  theme (axis.text.x = element_text(size = 15),
+         axis.text.y =  element_text(size = 15),
+         axis.title.x = element_text(size = 20, margin = margin(t = 10, r = 20, b = 0, l = 0)),
+         axis.title.y = element_text(size = 15),
+        legend.position="none",
+        panel.spacing.x = unit(2, "lines"),
+        plot.title = element_text(hjust =.5, size = 40, colour = "black"),
+        strip.background = element_rect(colour = "black", fill = "ivory3"),
+        strip.placement = "inside",
+        strip.text = element_text(size = 14, face = "bold"))
+
+Rot_Graph 
+
+# The graph saves to the Reports folder witn in the project folder
+ggsave(filename = "Rotation Speed.png", plot = Rot_Graph, width = 5, height = 5, dpi = 300)
+```
+
