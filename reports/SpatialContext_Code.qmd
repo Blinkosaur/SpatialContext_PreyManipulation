@@ -1,14 +1,11 @@
-Project Title:
-The influence of spatial context on prey manipulation behaviors in the 
-California moray eel (Gymnothorax mordax)
 
-Authors: 
+# The influence of spatial context on prey manipulation behaviors in the California moray eel (*Gymnothorax mordax*)
 
 
-Research Aims:
-Our aim was to assess the impact of spatial context on prey manipulation in the California moray eel (Gymnothorax mordax), a crevice forager with a diverse prey handling repertoire. We first compared the duration engaged in specific manipulation behaviors between spatially “enclosed” and “open” foraging environments (Experiment 1), followed by a comparison of tightly enclosed spaces that were scaled to individual moray diameter (Experiment 2). 
+## Research Aims:
+Our aim was to assess the impact of spatial context on prey manipulation in the California moray eel (*Gymnothorax mordax*), a crevice forager with a diverse prey handling repertoire. We first compared the duration engaged in specific manipulation behaviors between spatially “enclosed” and “open” foraging environments (Experiment 1), followed by a comparison of tightly enclosed spaces that were scaled to individual moray diameter (Experiment 2). 
 
-
+### Libraries 
 ```{r - Libraries}
 library(tidyverse)
 library(ggplot2)
@@ -56,11 +53,11 @@ Example - Shaking_Dur = the total duration spent shaking
 Knotting_Binomial = was knotting observed, yes/no
       
 
-# ⌛⌛⌛️ TRIAL COMPONENT DURATIONS
+## ⌛⌛⌛️ TRIAL COMPONENT DURATIONS ⌛⌛⌛️ 
 
 This section of code focuses on the total feeding time (Trial_Duration), the time spent handling prey (Handling_Dur), and the time spent swallowing prey (Ptransport_Dur) between treatments (open vs 5cm vs 10cm treatments)
 
-# Data Prep - Duration of Trial Components  [Feeding Duration, Manipulation Duration, Swallowing Duration]
+### Data Prep - Duration of Trial Components  [Feeding Duration, Manipulation Duration, Swallowing Duration]
 
 ```{r - Trial Duration Componants -- Mean & SE Calculations }
 
@@ -141,7 +138,7 @@ P1_Swallow_SE
 ```
 
 
-# Stats - Duration of Trial Components [Feeding Duration, Manipulation Duration, Swallowing Duration] 
+### Stats - Duration of Trial Components [Feeding Duration, Manipulation Duration, Swallowing Duration] 
 
 This section of code is the statistical analysis comparing each of the Trial Duration componants between the three treatments. For each componant (total time feeding, prey handling, and swallowing), the data is fitted with a GLMM model, with eel identity as a repeated measure...followed by estimated marginal means and pairwise comparisons. 
 
@@ -225,7 +222,7 @@ emmeans:::cld.emmGrid(PT_EMMS, Letters = letters)
 
 ```
 
-#Graphics - Durations of Trial Components 
+### Graphics - Durations of Trial Components 
 The next code makes the bar graphs for the trial duration components, comparing the durations feeding, handling prey, and swallowing between the three treatments (open, 10cm, 5cm)
 
 ```{r - Trial Durations Graphics}
@@ -278,11 +275,11 @@ ggsave(filename = "P1-TrialComponents.png", plot = P1_Dur_Graph, width = 10, hei
 
 
 
-# ⏰⏰⏰ BEHAVIOR DURATION
+## ⏰⏰⏰ BEHAVIOR DURATION ⏰⏰⏰ 
 
 This next chapter of code compares the time spent engaged in different prey manipulation behaviors between treatments. Because there was no significant difference in total manipulation time  (see previous) between treatments, we used the total duration engaged in each behavior (Example Column: Shaking_Duration), as opposed to proportional data (out of total feeding or handling time)
 
-# Data Prep - Duration of Behaviors
+### Data Prep - Duration of Behaviors
 
 ```{r Experiment 1 - Data Prep - Average Durations of Behaviors (Not Proportion)}
 
@@ -317,7 +314,7 @@ P1BehaviorDurSE$Treatment = factor(P1BehaviorDurSE$Treatment)
 ```
 
 
-# Stats - Duration of Behaviors 
+### Stats - Duration of Behaviors 
 
 The next code is the statistical analysis, comparing the time spent engaged in each behavior (ramming, rotating, shaking, knotting) between the treatments (open, 10cm, 5cm). To compare average duration spent engaged in each behavior, we fit the data for each behavior with a GLMM using a Tweedie distribution. The data is not normal and shows overdisperson making other distributions less suitable. The Tweedie distribution encompasses a wide range of distribution shapes and is also well suited for modeling continuous positive data inclusive of 0 values.
 
@@ -425,7 +422,7 @@ emmeans:::cld.emmGrid(KnottingDurEMMS, Letters = letters)
 ```
 
 
-# Graphics - Duration of Behaviors 
+### Graphics - Duration of Behaviors 
 
 ```{r PHASE 1: Graphics - Average Durations of Behaviors (Not Proportion) }
 
@@ -520,13 +517,13 @@ ggsave(filename = "P1-BehaviorDuration.png", plot = P1_BehaviorDur_Pics, width =
 
 
 # ------------------------------------
-# Experiment 1 - FINAL FIGURE Graphic
+## Experiment 1 - FINAL FIGURE Graphic
 # -----------------------------------
 
 
 The code below combines the Trial Component Figure with the Behavior Duration Figure for Experiment 1
 
-``` {R Final Figure}
+``` {R P1 Final Figure - Combining Exp 2 Figures}
 
 P1_FinalFigure <- ggarrange(P1_Dur_Graph, P1_BehaviorDur_Pics,
                     labels = c("A", "B"),
@@ -574,11 +571,11 @@ Example - Shaking_Dur = the total duration spent shaking
 Knotting_Binomial = was knotting observed, yes/no
 
 
-## ⌛️⌛️⌛️ TRIAL COMPONENT DURATION
+## ⌛️⌛️⌛️ TRIAL COMPONENT DURATION ⌛⌛⌛️ 
 
 This section of code focuses on the total feeding time (Trial_Duration), the time spent handling prey (Handling_Duration), and the time spent swallowing prey (PT_Duration) between treatments (small, medium, large)
 
-#Data Prep - Duration of Trial Components 
+### Data Prep - Duration of Trial Components 
 ```{r Phase 2: Duration of Trial Components -- Data Prep}
 #Selecting the columns we want:
 DurSelP2 <- P2 %>%
@@ -656,7 +653,7 @@ P2_Swallow_SE = DurSelP2 %>%
 P2_Swallow_SE 
 ```
 
-#Stats - Duration of Trial Components 
+### Stats - Duration of Trial Components 
 
 This section of code is the statistical analysis comparing each of the Trial Duration componants between the three treatments. For each componant (total time feeding, prey handling, and swallowing), the data is fitted with a GLMM model, with eel identity as a repeated measure...followed by estimated marginal means and pairwise comparisons. 
 
@@ -729,7 +726,7 @@ pairs(PT2_EMMS)
 emmeans:::cld.emmGrid(PT2_EMMS, Letters = letters)
 ```
 
-# Graphics - Duration of Trial Components 
+### Graphics - Duration of Trial Components 
 
 The next code makes the bar graphs for the trial duration components, comparing the durations feeding, handling prey, and swallowing between the three treatments (small, medium, large). 
 
@@ -780,11 +777,11 @@ ggsave(filename = "P2-Trial Components.png", plot = P2_Dur_Graph, width = 11, he
 
 ```
 
-## ⏰ ⏰ ⏰  BEHAVIOR DURATION
+## ⏰ ⏰ ⏰  BEHAVIOR DURATION ⏰⏰⏰ 
 
 This next chapter of code compares the time spent engaged in different prey manipulation behaviors between treatments. Because there was no significant difference in total manipulation time  (see previous) between treatments, we used the total duration engaged in each behavior (Example Column: 'Shaking_Duration'), as opposed to proportional data (out of total feeding or handling time)
 
-# Data Prep - Duration of Behaviors 
+### Data Prep - Duration of Behaviors 
 ```{r PHASE 2: Data Prep - Average Durations of Behaviors (Not Proportion) }
 head(P2)
 
@@ -816,7 +813,7 @@ P2BehaviorDurSE$Treatment = factor(P2BehaviorDurSE$Treatment)
 
 ```
 
-# Stats - Duration of Behaviors 
+### Stats - Duration of Behaviors 
 
 The next code is the statistical analysis, comparing the time spent engaged in each behavior (ramming, rotating, shaking, knotting, body anchoring [aka 'crinkle'], and tail anchoring [aka 'anchor']) between the treatments (small, medium, large). To compare average duration spent engaged in each behavior, we fit the data for each behavior with a GLMM using a Tweedie distribution. The data is not normal and shows over disperson making other distributions less suitable. The Tweedie distribution encompasses a wide range of distribution shapes and is also well suited for modeling continuous positive data inclusive of 0 values.
 
@@ -942,7 +939,7 @@ emmeans:::cld.emmGrid(ShakingDurEMMS, Letters = letters)
 
 ```
 
-# Graphics - Duration of Behaviors 
+### Graphics - Duration of Behaviors 
 
 ```{r PHASE 2: Graphics - Average Durations of Behaviors (Not Proportion) - All data}
 
@@ -1055,7 +1052,7 @@ ggsave(filename = "P2-Behavior Durations.png", plot = P2_BehaviorDur_Pics , widt
 ```
 
 # ----------------------------
-# Experiment 2 - FINAL FIGURE
+## Experiment 2 - FINAL FIGURE
 # ---------------------------
 
 The code below combines the Trial Component Figure with the Behavior Duration Figure for Experiment 2
@@ -1080,11 +1077,11 @@ ggsave(filename = "P2_Final.png", plot = P2_FinalFigure, width = 11, height = 10
 # BONUS FEATURES
 #~~~~~~~~~~~~~~~~~~~~
 
-# Experiment 1 & 2 Combined
+## Experiment 1 & 2 Combined
 
 The following code combines data from experiments 1 and 2. We wanted to compare the durations spent engaged in different behaviors between the open treatment (experiment 1) and all three diameter-based treatments from experiment 2 (small, medium, large)
 
-# Data Prep - Bonus 
+### Data Prep - Bonus 
 ``` {R Open + Diameter-Based Treatments Set Up}
 #Reading in the dataset
 
@@ -1127,7 +1124,7 @@ head(BonusSE)
 ```
 
 
-#Bonus Stats
+### Bonus Stats
 
 The following code compares the durations spent engaged in shaking, ramming, rotating, and knotting between the open and diameter based treatments (small, medium, large)
 ``` {R Bonus Stats}
@@ -1212,7 +1209,7 @@ emmeans:::cld.emmGrid(Bonus_KnottingDurEMMS , Letters = letters)
 
 ```
 
-# Bonus Graphics 
+### Bonus Graphics 
 
 The following code graphs the behaviors that showed interesting results (knotting and rotating)
 
@@ -1302,11 +1299,11 @@ ggsave(filename = "BonusGraphic.png", plot = Bonus_Pics , width = 10, height = 5
 ```
 
 
-# 🏎💨  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 🏎💨  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 🏎💨
 # ROTATION SPEED 
-# 🏎💨 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 🏎💨 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 🏎💨
 
-# Rotation Data Set-Up
+### Rotation Data Set-Up
 
 The following code reads in the data set for rotating speed
 ``` {R is for Rotate}
@@ -1337,7 +1334,7 @@ Rot_SE = Rot %>%
 Rot_SE
 ```
 
-# Rotation Speed Stats 
+### Rotation Speed Stats 
 To compare rotation speed between treatments, we log-transformed the data and employed a mixed-effects model with a gamma distribution. We incorporated individual eels as a repeated measure by including eel identity as a random effect to account for variability between individuals. 
 
 ```{r Phase 2 - Stats - Rotation Speed Data}
@@ -1362,7 +1359,7 @@ emmeans:::cld.emmGrid(RotEMMS, Letters = letters)
 
 ```
 
-# Graphics - Rotation Speeds 
+### Graphics - Rotation Speeds 
 ```{r Rotation Graphics}
 #Telling the bars to go from Small to Medium to Large instead of alphabetical 
 Rot_SE$Treatment <- factor(Rot_SE$Treatment, levels=c("Small", "Medium", "Large","Open"))
