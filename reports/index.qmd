@@ -1312,7 +1312,6 @@ The following code reads in the data set for rotating speed
 Rot=read.csv(here::here("data/Rotation_Complete.csv"))
 
 head(Rot) 
-
 ```
 
 The followig code calculated the mean and standard error for rotating speed
